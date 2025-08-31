@@ -1,34 +1,30 @@
 import pandas as pd
 import numpy as np
 import random
-import copy # Wichtig für das Kopieren der Einteilungen
+import copy
 import config
 
-# Die Funktion erstelle_zufaellige_einteilung bleibt unverändert
-def erstelle_zufaellige_einteilung(schueler_ids):
+# Funktion akzeptiert jetzt anzahl_klassen als Parameter
+def erstelle_zufaellige_einteilung(schueler_ids, anzahl_klassen):
     zufaellig_gemischt = list(schueler_ids)
     random.shuffle(zufaellig_gemischt)
-    return [list(klasse) for klasse in np.array_split(zufaellig_gemischt, config.ANZAHL_KLASSEN)]
+    return [list(klasse) for klasse in np.array_split(zufaellig_gemischt, anzahl_klassen)]
 
-# NEUE FUNKTION: Der Optimierungs-Algorithmus
-def optimiere_einteilung(einteilung, df, gesamt_stats):
-    """
-    Verbessert eine gegebene Einteilung durch zufälliges Tauschen von Schülern.
-    OPTIMIERTE VERSION: Arbeitet direkt auf der Liste, um 'deepcopy' zu vermeiden.
-    """
+# Funktion akzeptiert jetzt anzahl_klassen als Parameter
+def optimiere_einteilung(einteilung, df, gesamt_stats, anzahl_klassen):
     aktuelle_einteilung = copy.deepcopy(einteilung)
     bester_score = bewerte_einteilung(aktuelle_einteilung, df, gesamt_stats)
     
     print(f"\n🚀 Starte Optimierung... Anfangs-Score: {bester_score:.2f}")
 
-    anzahl_iterationen = 5000
+    anzahl_iterationen = 500
     
     for i in range(anzahl_iterationen):
-        # Fortschrittsanzeige jetzt alle 500 Schritte
-        if i % 500 == 0:
+        if i % 50 == 0:
             print(f"   ...Iteration {i}/{anzahl_iterationen}, aktueller Score: {bester_score:.2f}")
 
-        klasse1_idx, klasse2_idx = random.sample(range(config.ANZAHL_KLASSEN), 2)
+        # anzahl_klassen wird jetzt als Parameter verwendet
+        klasse1_idx, klasse2_idx = random.sample(range(anzahl_klassen), 2)
         
         if not aktuelle_einteilung[klasse1_idx] or not aktuelle_einteilung[klasse2_idx]:
             continue
@@ -36,27 +32,22 @@ def optimiere_einteilung(einteilung, df, gesamt_stats):
         schueler1_pos = random.randrange(len(aktuelle_einteilung[klasse1_idx]))
         schueler2_pos = random.randrange(len(aktuelle_einteilung[klasse2_idx]))
 
-        # Tausche die Schüler direkt in der Liste
         schueler1 = aktuelle_einteilung[klasse1_idx][schueler1_pos]
         schueler2 = aktuelle_einteilung[klasse2_idx][schueler2_pos]
 
         aktuelle_einteilung[klasse1_idx][schueler1_pos] = schueler2
         aktuelle_einteilung[klasse2_idx][schueler2_pos] = schueler1
         
-        # Bewerte die neue Einteilung
         neuer_score = bewerte_einteilung(aktuelle_einteilung, df, gesamt_stats)
 
-        # Wenn der Tausch besser war, aktualisiere den besten Score
         if neuer_score > bester_score:
             bester_score = neuer_score
-        # Wenn nicht, mache den Tausch sofort rückgängig
         else:
             aktuelle_einteilung[klasse1_idx][schueler1_pos] = schueler1
             aktuelle_einteilung[klasse2_idx][schueler2_pos] = schueler2
             
     print(f"🏁 Optimierung beendet. Finaler Score: {bester_score:.2f}")
     return aktuelle_einteilung, bester_score
-
 
 # Die Funktion bewerte_einteilung bleibt unverändert
 def bewerte_einteilung(einteilung, df, gesamt_stats):
@@ -78,7 +69,7 @@ def bewerte_einteilung(einteilung, df, gesamt_stats):
         if schueler1['Trennen_Von'] == id2 or schueler2['Trennen_Von'] == id1:
             gesamt_score += config.STRAFE_TRENNUNG_MISSACHTET
     for klasse_ids in einteilung:
-        if not klasse_ids: continue # Überspringe leere Klassen
+        if not klasse_ids: continue
         klassen_df = df.loc[klasse_ids]
         maedchen_anteil = klassen_df[klassen_df['Geschlecht'] == 'w'].shape[0] / len(klassen_df)
         abweichung_geschlecht = abs(maedchen_anteil - 0.5) * len(klassen_df)
