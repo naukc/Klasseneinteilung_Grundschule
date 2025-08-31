@@ -72,6 +72,19 @@ def bewerte_einteilung(einteilung, df, gesamt_stats):
                     if sep_id in klasse_set:
                         score += config.STRAFE_TRENNUNG_MISSACHTET
 
+    # 6. Gleichmäßige Verteilung der Jungen
+    if config.STRAFE_ABWEICHUNG_JUNGEN != 0:
+        # Ideal: alle Klassen haben ungefähr gleich viele Jungen
+        gesamt_jungen = (df["Geschlecht"] == "m").sum()
+        ideal_pro_klasse = gesamt_jungen / len(einteilung)
+
+        for klasse in einteilung:
+            klassen_df = df.loc[klasse]
+            anzahl_jungen = (klassen_df["Geschlecht"] == "m").sum()
+            abweichung = abs(anzahl_jungen - ideal_pro_klasse)
+            score += config.STRAFE_ABWEICHUNG_JUNGEN * abweichung
+
+
     return score
 
 def optimiere_einteilung(
