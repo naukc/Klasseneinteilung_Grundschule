@@ -13,57 +13,66 @@ def erstelle_zufaellige_einteilung(schueler_ids, anzahl_klassen):
 
 
 def bewerte_einteilung(einteilung, df, gesamt_stats):
-    """Berechnet den Score einer Einteilung basierend auf den Regeln in config.py."""
+    """Berechnet den Score einer Einteilung basierend auf den Regeln in config.py.
+       Wünsche/Trennungen werden über SCHÜLER-IDs (Index) bewertet, nicht über Namen.
+    """
+    import pandas as pd
     score = 0
 
-    # 1. Geschlechterbalance
+    # 1) Geschlechterbalance
     for klasse in einteilung:
         klassen_df = df.loc[klasse]
         maennlich = (klassen_df["Geschlecht"] == "m").sum()
-        weiblich = (klassen_df["Geschlecht"] == "w").sum()
+        weiblich  = (klassen_df["Geschlecht"] == "w").sum()
         abweichung = abs(maennlich - weiblich)
         score += config.STRAFE_ABWEICHUNG_GESCHLECHT * abweichung
 
-    # 2. Migrationshintergrund
+    # 2) Migrationshintergrund (Abweichung vom Stufenschnitt, in %-Punkten)
     for klasse in einteilung:
         klassen_df = df.loc[klasse]
         migrationsanteil = (klassen_df["Migrationshintergrund / 2. Staatsangehörigkeit"] == "Ja").sum() / len(klassen_df)
-        abweichung = abs(migrationsanteil - gesamt_stats["avg_migration"]) * 100
-        score += config.STRAFE_ABWEICHUNG_MIGRATION * abweichung
+        abw_prozentpunkte = abs(migrationsanteil - gesamt_stats["avg_migration"]) * 100
+        score += config.STRAFE_ABWEICHUNG_MIGRATION * abw_prozentpunkte
 
-    # 3. Auffälligkeit
+    # 3) Auffälligkeit (Abweichung von der idealen Klassensumme)
     for klasse in einteilung:
         klassen_df = df.loc[klasse]
-        summe = klassen_df["Auffaelligkeit_Score"].sum()
+        summe = pd.to_numeric(klassen_df["Auffaelligkeit_Score"], errors="coerce").fillna(0).sum()
         abweichung = abs(summe - gesamt_stats["avg_auffaelligkeit_summe"])
         score += config.STRAFE_ABWEICHUNG_AUFFAELLIGKEIT * abweichung
 
-    # 4. Freundschaftswünsche
-    wunsch_spalten = [sp for sp in df.columns if sp.startswith("Wunsch_")]
+    # 4) Freundschaftswünsche (per ID)
+    wunsch_spalten = [c for c in df.columns if str(c).startswith("Wunsch_")]
     if wunsch_spalten:
         for klasse in einteilung:
+            klasse_set = set(map(int, klasse))  # schnelleres Membership-Checking
             klassen_df = df.loc[klasse]
-            for _, row in klassen_df.iterrows():
-                for wunsch_spalte in wunsch_spalten:
-                    gewuenscht = row[wunsch_spalte]
-                    if pd.isna(gewuenscht):
-                        continue
-                    if gewuenscht in klassen_df["Name"].values:
+            for schueler_id, row in klassen_df.iterrows():
+                # alle gültigen Wunsch-IDs dieses Schülers sammeln (Duplikate vermeiden)
+                wuensche_ids = []
+                for wcol in wunsch_spalten:
+                    wish_val = row.get(wcol)
+                    wish_id = pd.to_numeric(wish_val, errors="coerce")
+                    if pd.notna(wish_id):
+                        wuensche_ids.append(int(wish_id))
+                for wish_id in set(wuensche_ids):
+                    if wish_id != int(schueler_id) and wish_id in klasse_set:
                         score += config.PUNKTE_WUNSCH_ERFUELLT
 
-    # 5. Trennung
+    # 5) Trennung (per ID)
     if "Trennen_Von" in df.columns:
         for klasse in einteilung:
+            klasse_set = set(map(int, klasse))
             klassen_df = df.loc[klasse]
-            for _, row in klassen_df.iterrows():
-                trennung = row.get("Trennen_Von")
-                if pd.isna(trennung):
-                    continue
-                if trennung in klassen_df["Name"].values:
-                    score += config.STRAFE_TRENNUNG_MISSACHTET
+            for schueler_id, row in klassen_df.iterrows():
+                sep_val = row.get("Trennen_Von")
+                sep_id = pd.to_numeric(sep_val, errors="coerce")
+                if pd.notna(sep_id):
+                    sep_id = int(sep_id)
+                    if sep_id in klasse_set:
+                        score += config.STRAFE_TRENNUNG_MISSACHTET
 
     return score
-
 
 def optimiere_einteilung(
     einteilung, df, gesamt_stats, anzahl_klassen,
